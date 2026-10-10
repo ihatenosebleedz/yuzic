@@ -1,0 +1,97 @@
+name: iOS Unsigned IPA Build
+
+# A hand-run device build that produces a plain `.ipa` with no code signing,
+# for feature-testing a branch on a Mac or an unsigned side-load.
+#
+# It is deliberately a test artifact, not the release pipeline:
+#
+# - `ios-build.yml` is the only way an app ships (TestFlight, via `match`
+#   signing); nothing here talks to App Store Connect or touches an identity.
+# - Building for a device with `CODE_SIGNING_ALLOWED=NO` needs no Apple
+#   credentials, so anyone who can run a workflow can run this.
+# - It is a Release configuration so the JS bundle is embedded and the app
+#   runs without Metro.
+#
+# The artifact feeds a *re-sign*, it is not installable as-is: iOS refuses an
+# unsigned app. To use it, codesign the app on a Mac with your own identity
+# (a free personal team is enough) and re-archive the `Payload/` folder, or
+# run the device install through the release pipeline instead.
+
+on:
+  workflow_dispatch:
+
+concurrency: ios-ipa-build
+
+jobs:
+  build-ios-device:
+    name: Build unsigned iOS device IPA
+    runs-on: macos-26
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      # Patches matter to any build, not just releases; see `ios-build.yml`.
+      - name: Verify patches are applied
+        run: ./tools/verify-patches.sh
+
+      - name: Cache CocoaPods
+        uses: actions/cache@v4
+        with:
+          path: ios/Pods
+          key: pods-${{ hashFiles('ios/Podfile.lock') }}
+          restore-keys: pods-
+
+      - name: Install CocoaPods
+        run: |
+          cd ios
+          pod install --repo-update
+
+      - name: Build for an iOS device (unsigned)
+        run: |
+          xcodebuild \
+            -workspace ios/Yuzic.xcworkspace \
+            -scheme Yuzic \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/ios-dev \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+
+      - name: Package the app as an IPA
+        run: |
+          APP_PATH=$(find build/ios-dev/Build/Products/Release-iphoneos -name 'Yuzic.app' -maxdepth 1 | head -1)
+          mkdir -p build/ipa/Payload build/artifact
+          cp -R "$APP_PATH" build/ipa/Payload/
+          cd build/ipa
+          ditto -c -k --sequesterRsrc --keepParent Payload ../artifact/Yuzic.ipa
+          echo "Wrapped: ${APP_PATH}"
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: yuzic-ios-unsigned-ipa
+          path: build/artifact/Yuzic.ipa
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log
+          path: build/ios-dev/Logs/Build/*.xcactivitylog
+          if-no-files-found: ignore
