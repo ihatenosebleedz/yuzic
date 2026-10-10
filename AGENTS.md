@@ -33,6 +33,7 @@ support boundaries in `docs/`.
 - `.github/workflows/pr-checks.yml`: lint (`npm run lint`), typed routes, typecheck (`npx tsc --noEmit`), tests (`npx jest --ci`) and the architecture gates (`npm run architecture:check`) on every push/PR to `master` and `dev`. Keep this green — it's what branch protection gates on.
 - `.github/workflows/android-build.yml` / `ios-build.yml`: build and ship to Play's alpha track / App Store Connect (TestFlight only — `submit_for_review: false`, never public review). **`workflow_call` only** — there is no `workflow_dispatch` on either, so a release is the one thing that can ship. No manual version inputs — see below.
 - `.github/workflows/e2e.yml`: the Maestro suites on an iOS simulator, on demand only — not a PR gate and not a nightly, because the flows sign in through a public demo server and each run is forty minutes of a macOS runner. See [`.maestro/README.md`](.maestro/README.md).
+- `.github/workflows/ios-ipa-build.yml`: a hand-run **unsigned** device build (`CODE_SIGNING_ALLOWED=NO`) that wraps the app as `Yuzic.ipa` for re-signing elsewhere — it is not installable as-is and never touches a signing identity.
 - `.github/workflows/release-on-version-bump.yml`: on push to `master`, if `package.json`'s `version` field changed from the previous commit, automatically calls both build workflows.
 
 ## `patches/` must stay in release builds
