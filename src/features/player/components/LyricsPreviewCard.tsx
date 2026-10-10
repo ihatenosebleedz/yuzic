@@ -12,7 +12,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
-import { LyricsResult } from '@/providers/contracts/ServerAdapter';
+import { LyricsResult, LyricWord } from '@/providers/contracts/ServerAdapter';
+import { KaraokeLine } from '@/features/lyrics/KaraokeLine';
 import Touchable from '@/components/Touchable';
 import { useRadius } from '@/features/theme/useRadius';
 
@@ -20,6 +21,8 @@ type Props = {
   lyrics: LyricsResult;
   position: number;
   contentWidth: number;
+  /** Whether the player is actually on screen — gates the fast word clock. */
+  active: boolean;
   onPress: () => void;
 };
 
@@ -39,10 +42,14 @@ function getCurrentLineIndex(
 
 function LyricLine({
   text,
+  words,
   variant,
+  karaokeActive,
 }: {
   text: string;
+  words?: LyricWord[];
   variant: 'active' | 'adjacent' | 'inactive';
+  karaokeActive: boolean;
 }) {
   const opacityTarget =
     variant === 'active' ? 1 : variant === 'adjacent' ? 0.85 : 0.5;
@@ -64,7 +71,11 @@ function LyricLine({
       numberOfLines={2}
       style={[styles.line, baseStyle, animatedStyle]}
     >
-      {text}
+      {karaokeActive && words && words.length > 0 ? (
+        <KaraokeLine words={words} active color={onDark.text} fallback={text} />
+      ) : (
+        text
+      )}
     </Animated.Text>
   );
 }
@@ -73,6 +84,7 @@ export default function LyricsPreviewCard({
   lyrics,
   position,
   contentWidth,
+  active,
   onPress,
 }: Props) {
   const { t } = useTranslation();
@@ -144,7 +156,9 @@ export default function LyricsPreviewCard({
           <View key={index} onLayout={onLineLayout(index)}>
             <LyricLine
               text={line.text}
+              words={line.words}
               variant={getVariant(index)}
+              karaokeActive={active && index === currentIndex}
             />
           </View>
         ))}

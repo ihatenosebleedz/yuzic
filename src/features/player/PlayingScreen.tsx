@@ -50,14 +50,16 @@ interface PlayingScreenProps {
 const LyricsPreviewCardResolver: React.FC<{
     lyrics: LyricsResult;
     contentWidth: number;
+    active: boolean;
     onPress: () => void;
-}> = ({ lyrics, contentWidth, onPress }) => {
+}> = ({ lyrics, contentWidth, active, onPress }) => {
     const progress = usePlayingProgress();
     return (
         <LyricsPreviewCard
             lyrics={lyrics}
             position={progress.position}
             contentWidth={contentWidth}
+            active={active}
             onPress={onPress}
         />
     );
@@ -254,6 +256,7 @@ const PlayingScreen: React.FC<PlayingScreenProps> = ({
                                 <LyricsPreviewCardResolver
                                     lyrics={lyrics}
                                     contentWidth={columnWidth}
+                                    active={isOpen}
                                     onPress={openLyricsSheet}
                                 />
                             )}

@@ -15,7 +15,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import { usePlayingProgress, usePlayingActions } from '@/features/playback/PlayingContext';
 import { useTheme } from '@/features/theme/useTheme';
-import { LyricsResult } from '@/providers/contracts/ServerAdapter';
+import { LyricsResult, LyricWord } from '@/providers/contracts/ServerAdapter';
+import { KaraokeLine } from '@/features/lyrics/KaraokeLine';
 import { ChevronDown } from 'lucide-react-native';
 import { renderBackdrop } from '@/components/BottomSheetBackdrop';
 import {
@@ -42,14 +43,18 @@ function getCurrentLineIndex(
 
 function LyricLine({
   text,
+  words,
   variant,
   activeColor,
   inactiveColor,
+  karaokeActive,
 }: {
   text: string;
+  words?: LyricWord[];
   variant: 'active' | 'adjacent' | 'inactive';
   activeColor: string;
   inactiveColor: string;
+  karaokeActive: boolean;
 }) {
   const opacityTarget =
     variant === 'active' ? 1 : variant === 'adjacent' ? 0.85 : 0.5;
@@ -71,7 +76,11 @@ function LyricLine({
       numberOfLines={4}
       style={[styles.line, { color, fontWeight }, animatedStyle]}
     >
-      {text}
+      {karaokeActive && words && words.length > 0 ? (
+        <KaraokeLine words={words} active color={activeColor} fallback={text} />
+      ) : (
+        text
+      )}
     </Animated.Text>
   );
 }
@@ -89,6 +98,10 @@ const LyricsBottomSheet = forwardRef<BottomSheetModal, LyricsBottomSheetProps>(
     const [contentHeight, setContentHeight] = useState(0);
     const [viewportHeight, setViewportHeight] = useState(0);
     const [layoutVersion, setLayoutVersion] = useState(0);
+    // The sheet is mounted whether or not it is open, so the fast word clock
+    // has to know the difference: only a line that is both current and on
+    // screen is worth re-rendering fifty times a second.
+    const [presented, setPresented] = useState(false);
 
     const lines = useMemo(() => lyrics?.lines ?? [], [lyrics?.lines]);
     // Unsynced lines all carry `startMs: 0`, which would otherwise resolve to
@@ -144,6 +157,10 @@ const LyricsBottomSheet = forwardRef<BottomSheetModal, LyricsBottomSheetProps>(
       return 'inactive';
     };
 
+    // Word-level karaoke for the current line, and only while the sheet is up.
+    const isKaraokeActive = (index: number) =>
+      synced && presented && index === currentIndex;
+
     return (
       <BottomSheetModal
         ref={ref}
@@ -153,6 +170,7 @@ const LyricsBottomSheet = forwardRef<BottomSheetModal, LyricsBottomSheetProps>(
         backdropComponent={renderBackdrop}
         stackBehavior="push"
         onDismiss={onClose}
+        onChange={(index) => setPresented(index >= 0)}
         backgroundStyle={[optionSheetStyles.sheetBackground, sheetBg]}
         handleIndicatorStyle={{ backgroundColor: colors.border }}
       >
@@ -204,18 +222,22 @@ const LyricsBottomSheet = forwardRef<BottomSheetModal, LyricsBottomSheetProps>(
               >
                 <LyricLine
                   text={line.text}
+                  words={line.words}
                   variant={getVariant(index)}
                   activeColor={colors.secondary}
                   inactiveColor={colors.subtext}
+                  karaokeActive={isKaraokeActive(index)}
                 />
               </Touchable>
             ) : (
               <LyricLine
                 key={index}
                 text={line.text}
+                words={line.words}
                 variant={getVariant(index)}
                 activeColor={colors.secondary}
                 inactiveColor={colors.subtext}
+                karaokeActive={false}
               />
             )
           )}

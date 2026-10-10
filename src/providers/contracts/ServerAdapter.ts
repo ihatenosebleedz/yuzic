@@ -330,9 +330,35 @@ export interface LyricsApi {
   getBySongId(songId: string): Promise<LyricsResult | null>;
 }
 
+/**
+ * One word (or syllable) inside a line, timed by the source.
+ *
+ * Word timing is what a karaoke view needs — the line's own `startMs` says when
+ * a line begins, this says when each word of it is sung. Only some sources
+ * carry it: Navidrome serves it through the OpenSubsonic `songLyrics` v2
+ * `cueLine[].cue[]` on `getLyricsBySongId?enhanced=true`; plain LRC, Jellyfin
+ * and Emby are line-level only and never produce these.
+ */
+export type LyricWord = {
+  startMs: number;
+  endMs: number;
+  text: string;
+  /** UTF-8 byte offsets into the parent line, where the server supplies them.
+   *  Kept so a repeated word or a multibyte substring can be mapped back to
+   *  its place in `text` exactly; the renderer itself does not need them. */
+  byteStart?: number;
+  byteEnd?: number;
+};
+
 export type LyricLine = {
   startMs: number;
   text: string;
+  /**
+   * Word-level timings, present only when the source provides them. A line
+   * without `words` keeps the whole-line highlight it has always had, so
+   * every existing source and renderer keeps working unchanged.
+   */
+  words?: LyricWord[];
 };
 
 export type LyricsResult = {

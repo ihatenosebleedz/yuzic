@@ -1,0 +1,106 @@
+name: iOS Test Build
+
+# A hand-run build for testing a feature branch on the iOS Simulator. It is
+# deliberately NOT the release pipeline:
+#
+# - `ios-build.yml` exists only to ship a version that has been bumped, and it
+#   lost its `workflow_dispatch` so a TestFlight build could never appear
+#   without a version behind it. Nothing here touches App Store Connect or a
+#   signing identity, so `workflow_dispatch` is safe against both concerns.
+# - It builds for the Simulator with no code signing, which means no Apple
+#   credentials are needed at all — anyone who can run a workflow can run this.
+# - It is a Release configuration so the JS bundle is embedded and the app
+#   runs without Metro.
+#
+# The artifact is a `.app` that only runs in the iOS Simulator on a Mac; it is
+# not installable on a physical device. Device installs go through the release
+# pipeline (TestFlight) or a local `expo run:ios`.
+
+on:
+  workflow_dispatch:
+    inputs:
+      configuration:
+        description: Build configuration (Debug runs from Metro; Release embeds the bundle)
+        type: choice
+        default: Release
+        options:
+          - Release
+          - Debug
+
+concurrency: ios-test-build
+
+jobs:
+  build-ios-simulator:
+    name: Build iOS Simulator
+    runs-on: macos-26
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+
+      # A test build installs the dev dependencies too. The `--omit=dev` in the
+      # release workflows is about keeping expo-dev-client out of a shipped
+      # binary; a simulator test build wants exactly what `expo run:ios`
+      # installs locally.
+      - name: Install Node dependencies
+        run: npm ci
+
+      # Patches matter to any build, not just releases; see `ios-build.yml`.
+      - name: Verify patches are applied
+        run: ./tools/verify-patches.sh
+
+      - name: Cache CocoaPods
+        uses: actions/cache@v4
+        with:
+          path: ios/Pods
+          key: pods-${{ hashFiles('ios/Podfile.lock') }}
+          restore-keys: pods-
+
+      - name: Install CocoaPods
+        run: |
+          cd ios
+          pod install --repo-update
+
+      - name: Build for the iOS Simulator
+        run: |
+          xcodebuild \
+            -workspace ios/Yuzic.xcworkspace \
+            -scheme Yuzic \
+            -configuration ${{ inputs.configuration }} \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/ios-sim \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Package the app
+        run: |
+          mkdir -p build/artifact
+          APP_PATH=$(find build/ios-sim/Build/Products -name 'Yuzic.app' -maxdepth 2 | head -1)
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" build/artifact/Yuzic-Simulator.app.zip
+          echo "Zipped: ${APP_PATH}"
+
+      - name: Upload app artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: yuzic-ios-simulator
+          path: build/artifact/Yuzic-Simulator.app.zip
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log
+          path: build/ios-sim/Logs/Build/*.xcactivitylog
+          if-no-files-found: ignore
