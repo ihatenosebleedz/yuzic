@@ -1,22 +1,38 @@
 import type { LyricWord } from '@/providers/contracts/ServerAdapter';
 
 /**
- * Opacity of a word while it waits, and of the word being sung the instant it
- * begins. Sung words are fully opaque; between the two, the current word climbs
- * from here to full as it is sung — the "lighting up" a karaoke line is. One
- * value for both so nothing snaps twice: waiting and just-begun are the same
- * dim resting state, and only the ramp distinguishes them.
+ * Opacity of a word while it waits, and the resting state the moment a word
+ * begins. Each word climbs from here to full over `KARAOKE_WORD_REVEAL_MS`;
+ * the ramp is what "lighting up" is. One value for both so nothing snaps
+ * twice: waiting and just-begun are the same dim resting state, and only the
+ * ramp distinguishes them.
  */
 const KARAOKE_WORD_WAITING_OPACITY = 0.45;
 
-/** A word and how far through its own window it is. */
+/**
+ * How long a word takes to reach full opacity once it begins, whatever the
+ * word's own duration.
+ *
+ * A ramp measured on the *word's* clock redesigns the blink: a 150 ms word
+ * given a 150 ms ramp flips on harder than the voice it follows, and the
+ * stop-start strobes. A fixed window longer than the typical word spacing
+ * crossfades each reveal into the next, so the light walks across the line
+ * rather than stepping word to word — the sung word glows in as its
+ * predecessors finish, as Apple Music's lyrics do.
+ */
+const KARAOKE_WORD_REVEAL_MS = 350;
+
+/** A word and how far through its reveal window it is. */
 type KaraokeWord = { text: string; progress: number };
 
 /**
- * Each word's progress through its own timed window: 0 while it waits, 1 once
- * it is fully sung, the fraction of the way through between. A line without
- * word timings yields no words, so a caller reaching here already knows it has
- * what it needs — the undefined case is just untyped callers' safety.
+ * Each word's progress through its reveal: 0 while it waits, 1 once its
+ * reveal window has passed, the fraction in between. A reveal is anchored to
+ * the word's start, not its own duration, and a word's end plays no part —
+ * only that a previously-sung word keeps its full shine and a word yet to
+ * begin stays dark. A line without word timings yields no words, so a caller
+ * reaching here already knows it has what it needs — the undefined case is
+ * just untyped callers' safety.
  */
 export function karaokeWordStates(
   words: readonly LyricWord[] | undefined,
@@ -27,17 +43,17 @@ export function karaokeWordStates(
     if (positionMs < word.startMs) {
       return { text: word.text, progress: 0 };
     }
-    // A zero-length word (start === end) is sung the instant it begins. A
-    // badly-signed end is clamped rather than echoed as a negative ramp.
-    const span = word.endMs - word.startMs;
-    const raw = span > 0 ? (positionMs - word.startMs) / span : 1;
+    const raw = (positionMs - word.startMs) / KARAOKE_WORD_REVEAL_MS;
     return { text: word.text, progress: Math.min(1, Math.max(0, raw)) };
   });
 }
 
 /** The opacity a word draws at `progress`: resting while waiting, full once
- *  sung, the ramp between for the word being sung. */
+ *  revealed, the eased ramp between. */
 export function karaokeWordOpacity(progress: number): number {
   const clamped = Math.min(1, Math.max(0, progress));
-  return KARAOKE_WORD_WAITING_OPACITY + (1 - KARAOKE_WORD_WAITING_OPACITY) * clamped;
+  // Smoothed so a reveal accelerates out of rest and settles into full, which
+  // is how a glow reads; a linear ramp still flickers at the word boundaries.
+  const eased = clamped * clamped * (3 - 2 * clamped);
+  return KARAOKE_WORD_WAITING_OPACITY + (1 - KARAOKE_WORD_WAITING_OPACITY) * eased;
 }
