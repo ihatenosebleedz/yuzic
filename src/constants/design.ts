@@ -46,7 +46,7 @@ export const spacing = {
 
 export const motion = {
   pressIn: 80, pressOut: 150, quick: 140, titleFade: 180, favorite: 200,
-  swipe: 220, contentFade: 240, modeChange: 300, washArrival: 450,
+  swipe: 220, contentFade: 240, modeChange: 300, lyricFade: 440, washArrival: 450,
   indeterminate: 900, progress: 1000, backgroundArrival: 1200,
   easing: { linear: 'linear', standard: 'cubic' },
 } as const;

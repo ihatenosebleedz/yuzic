@@ -9,6 +9,8 @@ import {
   BottomSheetScrollViewMethods,
 } from '@gorhom/bottom-sheet';
 import Animated, {
+  Easing,
+  interpolateColor,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
@@ -56,25 +58,32 @@ function LyricLine({
   inactiveColor: string;
   karaokeActive: boolean;
 }) {
+  const isActive = variant === 'active';
   const opacityTarget =
     variant === 'active' ? 1 : variant === 'adjacent' ? 0.85 : 0.5;
   const opacity = useSharedValue(opacityTarget);
+  const tint = useSharedValue(isActive ? 1 : 0);
 
   useEffect(() => {
-    opacity.value = withTiming(opacityTarget, { duration: motion.contentFade });
-  }, [opacity, opacityTarget]);
+    // The handoff between lines is a crossfade, not a swap: the line that is
+    // leaving dims and cools at the same pace the one arriving lights up, so
+    // there is never a frame where one is bright and the other is gone.
+    const config = { duration: motion.lyricFade, easing: Easing.inOut(Easing.cubic) };
+    opacity.value = withTiming(opacityTarget, config);
+    tint.value = withTiming(isActive ? 1 : 0, config);
+  }, [opacity, tint, opacityTarget, isActive]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,
+    color: interpolateColor(tint.value, [0, 1], [inactiveColor, activeColor]),
   }));
 
-  const color = variant === 'active' ? activeColor : inactiveColor;
-  const fontWeight = variant === 'active' ? '700' : '500';
+  const fontWeight = isActive ? '700' : '500';
 
   return (
     <Animated.Text
       numberOfLines={4}
-      style={[styles.line, { color, fontWeight }, animatedStyle]}
+      style={[styles.line, { fontWeight }, animatedStyle]}
     >
       {karaokeActive && words && words.length > 0 ? (
         <KaraokeLine words={words} active color={activeColor} fallback={text} />

@@ -7,6 +7,8 @@ import {
   LayoutChangeEvent,
 } from 'react-native';
 import Animated, {
+  Easing,
+  interpolateColor,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
@@ -51,25 +53,29 @@ function LyricLine({
   variant: 'active' | 'adjacent' | 'inactive';
   karaokeActive: boolean;
 }) {
+  const isActive = variant === 'active';
   const opacityTarget =
     variant === 'active' ? 1 : variant === 'adjacent' ? 0.85 : 0.5;
   const opacity = useSharedValue(opacityTarget);
+  const tint = useSharedValue(isActive ? 1 : 0);
 
   useEffect(() => {
-    opacity.value = withTiming(opacityTarget, { duration: motion.contentFade });
-  }, [opacity, opacityTarget]);
+    const config = { duration: motion.lyricFade, easing: Easing.inOut(Easing.cubic) };
+    opacity.value = withTiming(opacityTarget, config);
+    tint.value = withTiming(isActive ? 1 : 0, config);
+  }, [opacity, tint, opacityTarget, isActive]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,
+    color: interpolateColor(tint.value, [0, 1], [onDarkAlpha.body, onDark.text]),
   }));
 
-  const baseStyle =
-    variant === 'active' ? styles.activeLine : styles.inactiveLine;
+  const fontWeight = isActive ? '600' : '500';
 
   return (
     <Animated.Text
       numberOfLines={2}
-      style={[styles.line, baseStyle, animatedStyle]}
+      style={[styles.line, { fontWeight }, animatedStyle]}
     >
       {karaokeActive && words && words.length > 0 ? (
         <KaraokeLine words={words} active color={onDark.text} fallback={text} />
@@ -183,13 +189,5 @@ const styles = StyleSheet.create({
     ...typography.sectionTitle,
     textAlign: 'center',
     marginVertical: spacing.tight,
-  },
-  activeLine: {
-    color: onDark.text,
-    fontWeight: '600',
-  },
-  inactiveLine: {
-    color: onDarkAlpha.body,
-    fontWeight: '500',
   },
 });
